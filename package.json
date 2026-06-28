@@ -1,0 +1,40 @@
+{
+  "name": "@pulsmarket/cli",
+  "version": "6.6.1",
+  "description": "Puls CLI — a full terminal trading desk for the Puls prediction market on Arc: buy / sell / claim predictions, live markets + candlestick charts, the AI agent swarm, AI oracle, x402 signal unlocks, bring-your-own-agent, and a full-screen TUI.",
+  "type": "module",
+  "bin": {
+    "puls": "./puls.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "puls.mjs",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "puls",
+    "cli",
+    "tui",
+    "prediction-market",
+    "arc",
+    "circle",
+    "usdc",
+    "x402",
+    "ai-agent",
+    "candlestick",
+    "trading"
+  ],
+  "author": "RDM (rdmbtc)",
+  "license": "MIT",
+  "homepage": "https://pulsmarket.tech",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rdmbtc/Puls.git",
+    "directory": "cli"
+  }
+}
