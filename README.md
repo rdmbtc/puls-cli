@@ -49,6 +49,7 @@ puls stats
 puls markets
 puls oracle <slug>
 puls feed
+puls streams        # pay-per-second USDC streaming on Arc (RFB 4)
 ```
 
 ## Notes
