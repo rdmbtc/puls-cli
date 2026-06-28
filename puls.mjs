@@ -2378,7 +2378,7 @@ function help() {
   ln(`  ${Pk('Creator economy')} ${Dm('· x402 nanopayments')}`);
   ln(`    ${Wh('puls signals')}                  ${Dm('alpha marketplace (on-chain attested)')}`);
   ln(`    ${Wh('puls unlock')} ${Dm('<id>')}             ${Dm('pay the creator in USDC, reveal thesis')}`);
-  ln(`    ${Wh('puls streams')} ${Dm('[userId]')}         ${Dm('pay-per-second USDC streaming on Arc (RFB 4)')}`);
+  ln(`    ${Wh('puls streams')} ${Dm('[userId]')}         ${Dm('pay-per-second USDC streaming on Arc')}`);
   ln(`    ${Wh('puls portfolio')}                ${Dm('your open positions + P&L')}\n`);
   ln(`  ${Pk('Trading')}`);
   ln(`    ${Wh('puls buy')} ${Dm('<slug> yes|no <usdc>')} ${Dm('buy YES/NO shares on Arc')}`);
