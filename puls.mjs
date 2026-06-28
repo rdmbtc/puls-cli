@@ -1952,6 +1952,46 @@ async function cmdUnlock(id) {
   }
 }
 
+async function cmdStreams(arg) {
+  TITLE('streams');
+  const sp = spinner('loading streams', 'orbit');
+  try {
+    const [cfg, sum] = await Promise.all([
+      api('/api/streams/config').catch(() => null),
+      api('/api/streams/stats/summary').catch(() => null),
+    ]);
+    sp.stop();
+    if (jsonOut({ config: cfg, summary: sum })) return;
+    header('Puls Streams', 'pay-per-second on Arc · ' + (cfg && cfg.live ? 'x402 live' : 'demo'), '◆'); ln('');
+    if (cfg) {
+      ln('  ' + Dm('model     ') + Wh(String(cfg.model || 'pay-per-second').slice(0, PW - 12)));
+      ln('  ' + Dm('network   ') + Tx(String(cfg.network || '')) + Dm('  · settle @ ') + Cy('$' + cfg.settleThresholdUsdc));
+      ln('  ' + Dm('flow      ') + Dm('continuous authorization (rate+cap) · proof-of-flow auto-pause after ') + Tx(cfg.staleSec + 's idle'));
+      ln('');
+    }
+    if (sum) {
+      ln('  ' + Dm('streams   ') + Wh(String(sum.totalStreams)) + Dm('  · active ') + Em(String(sum.active)));
+      ln('  ' + Dm('streamed  ') + Cy('$' + (sum.streamedUsdc ?? 0)) + Dm('  · settled ') + Em('$' + (sum.settledUsdc ?? 0)) + Dm(' on-chain'));
+      ln('');
+    }
+    if (arg) {
+      const d = await api('/api/streams?userId=' + encodeURIComponent(arg)).catch(() => null);
+      const list = (d && d.streams) || [];
+      ln('  ' + rule(PW));
+      ln('  ' + Dm('streams for ' + arg + ':')); ln('');
+      if (!list.length) { ln('  ' + Dm('  none yet.') + '\n'); }
+      else list.slice(0, 12).forEach((s, i) => {
+        const st = s.status === 'active' ? Em('● active') : s.status === 'paused' ? Am('⏸ paused') : Dm('■ stopped');
+        ln('  ' + Pk(String(i + 1).padStart(2)) + '  ' + st + '  ' + Cy('$' + s.ratePerSecUsdc + '/s') + Dm(' cap $' + s.capUsdc) + '  ' + Dm('streamed ') + Wh('$' + s.accruedUsdc) + Dm(' · settled ') + Em('$' + s.settledUsdc));
+        if (s.resource) ln('      ' + Dm(String(s.resource).slice(0, PW - 8)));
+      });
+      ln('');
+    }
+    ln('  ' + rule(PW));
+    ln('  ' + Dm('Authorize a rate, settle by the second on Arc.  ') + Pk('puls streams <userId>') + Dm(' lists a wallet\'s streams.') + '\n');
+  } catch (e) { sp.stop(); await toastErr(e.message); }
+}
+
 async function cmdChat(rest) {
   TITLE('copilot');
   if (!(await checkLogin())) return;
@@ -2338,6 +2378,7 @@ function help() {
   ln(`  ${Pk('Creator economy')} ${Dm('· x402 nanopayments')}`);
   ln(`    ${Wh('puls signals')}                  ${Dm('alpha marketplace (on-chain attested)')}`);
   ln(`    ${Wh('puls unlock')} ${Dm('<id>')}             ${Dm('pay the creator in USDC, reveal thesis')}`);
+  ln(`    ${Wh('puls streams')} ${Dm('[userId]')}         ${Dm('pay-per-second USDC streaming on Arc (RFB 4)')}`);
   ln(`    ${Wh('puls portfolio')}                ${Dm('your open positions + P&L')}\n`);
   ln(`  ${Pk('Trading')}`);
   ln(`    ${Wh('puls buy')} ${Dm('<slug> yes|no <usdc>')} ${Dm('buy YES/NO shares on Arc')}`);
@@ -2374,6 +2415,7 @@ try {
   else if (cmd === 'portfolio' || cmd === 'pf') { await cmdPortfolio(); }
   else if (cmd === 'signals' || cmd === 'alpha') { await cmdSignals(); }
   else if (cmd === 'unlock' || cmd === 'buy-signal') { await cmdUnlock(args[1]); }
+  else if (cmd === 'streams' || cmd === 'stream') { await cmdStreams(args[1]); }
   else if (cmd === 'buy')      { await cmdBuy(args[1], args[2], args[3]); }
   else if (cmd === 'sell')     { await cmdSell(args[1], args[2]); }
   else if (cmd === 'claim')    { await cmdClaim(args[1]); }
