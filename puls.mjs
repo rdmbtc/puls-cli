@@ -37,7 +37,7 @@ import readline from 'node:readline';
 //  CONFIG
 // ═══════════════════════════════════════════════════════════════════
 
-const VERSION = '6.11.1';
+const VERSION = '6.11.2';
 const API_BASE = (process.env.PULS_API || 'https://api.pulsmarket.tech').replace(/\/+$/, '');
 const WEB_BASE = 'https://app.pulsmarket.tech';
 const CFG_DIR  = join(homedir(), '.puls');
@@ -843,7 +843,7 @@ async function startTUI() {
     const entryPrice = yes != null ? (side === 'YES' ? Number(yes) : 1 - Number(yes)) : undefined;
     setStatus('Submitting ' + side + ' $' + amt + '…'); render();
     try {
-      const r = await api('/api/trade/buy', { method: 'POST', auth: true, body: { slug: m.slug, side, usdcAmount: amt, question: m.question, entryPrice } });
+      const r = await api('/api/trade/buy', { method: 'POST', auth: true, body: { slug: m.slug, side, usdcAmount: amt, question: m.question, entryPrice, deadline: mDeadline(m) } });
       const res = await tuiTradeResult(r);
       setStatus(res.done ? '✓ bought ' + side + ' · $' + amt + ' USDC' : '● ' + (res.state || 'submitted')); await loadPf(); render();
     } catch (e) { setStatus('✗ ' + (e.message || e)); render(); }
@@ -1363,6 +1363,16 @@ async function startTUI() {
     }
 
     if (key === '\x03') return quit();                                                     // Ctrl+C always quits
+    // ── Buy amount entry is modal: capture digits/decimal/side/enter; never leak to tab hotkeys ──
+    if (buyMode) {
+      if (key === '\x1b') { buyMode = null; setStatus(''); render(); return; }
+      if (key === 'y' || key === '\x1b[D' || key === 'h') { buyMode.side = 'YES'; render(); return; }
+      if (key === 'n' || key === '\x1b[C' || key === 'l') { buyMode.side = 'NO'; render(); return; }
+      if (key === '\x7f' || key === '\b') { buyMode.amount = buyMode.amount.slice(0, -1); render(); return; }
+      if ((key >= '0' && key <= '9') || key === '.') { buyMode.amount += key; render(); return; }
+      if (key === '\r') { await execBuy(); return; }
+      return;
+    }
     if (key === '\x10') { paletteMode = true; paletteQuery = ''; paletteSel = 0; render(); return; }  // Ctrl+P palette
     if (key === '\t') { tab = (tab + 1) % tabs.length; sel = 0; scrollOff = 0; detailMarket = null; sigDetail = null; docScroll = 0; searching = false; render(); return; }
     if (key === '\x1b[Z') { tab = (tab + tabs.length - 1) % tabs.length; sel = 0; scrollOff = 0; detailMarket = null; sigDetail = null; docScroll = 0; searching = false; render(); return; }
@@ -1394,15 +1404,6 @@ async function startTUI() {
 
     // ── Market detail sub-view ──
     if (tab === TAB.MARKETS && detailMarket) {
-      if (buyMode) {
-        if (key === '\x1b') { buyMode = null; setStatus(''); render(); return; }
-        if (key === 'y' || key === '\x1b[D' || key === 'h') { buyMode.side = 'YES'; render(); return; }
-        if (key === 'n' || key === '\x1b[C' || key === 'l') { buyMode.side = 'NO'; render(); return; }
-        if (key === '\x7f' || key === '\b') { buyMode.amount = buyMode.amount.slice(0, -1); render(); return; }
-        if ((key >= '0' && key <= '9') || key === '.') { buyMode.amount += key; render(); return; }
-        if (key === '\r') { await execBuy(); return; }
-        return;
-      }
       if (key === '\x1b' || key === '\b' || key === '\x7f') { detailMarket = null; render(); return; }
       if (key === 'b') { buyMode = { side: 'YES', amount: '' }; setStatus('Buy: type amount · y/n side · Enter · Esc'); render(); return; }
       if (key === 'o') { openBrowser(WEB_BASE + '/m/' + (detailMarket.slug || '')); setStatus('Opening in browser…'); render(); return; }
@@ -2322,6 +2323,15 @@ async function pollTrade(txId, label = 'confirming on Arc') {
   return last;
 }
 function tradeDone(st) { return ['COMPLETE', 'CONFIRMED'].includes(String(st.state || '').toUpperCase()); }
+// Resolve a market's deadline (unix seconds) for the trade API. /api/markets
+// exposes it as `endDateIso`; fall back to endDate/deadline, else 30 days out.
+function mDeadline(m) {
+  const iso = m && (m.endDateIso || m.endDate);
+  if (iso) { const t = new Date(iso).getTime(); if (Number.isFinite(t) && t > 0) return Math.floor(t / 1000); }
+  const d = m && m.deadline != null ? Number(m.deadline) : NaN;
+  if (Number.isFinite(d) && d > 0) return d > 1e12 ? Math.floor(d / 1000) : Math.floor(d);
+  return Math.floor(Date.now() / 1000) + 30 * 86400;
+}
 
 async function cmdBuy(slug, sideArg, amountArg) {
   TITLE('buy');
@@ -2342,7 +2352,7 @@ async function cmdBuy(slug, sideArg, amountArg) {
   const sp = spinner('submitting trade', 'arc');
   try {
     const entryPrice = (m && m.yesPrice != null) ? (side === 'YES' ? Number(m.yesPrice) : 1 - Number(m.yesPrice)) : undefined;
-    const r = await api('/api/trade/buy', { method: 'POST', auth: true, body: { slug, side, usdcAmount: amount, question: m && m.question, entryPrice } });
+    const r = await api('/api/trade/buy', { method: 'POST', auth: true, body: { slug, side, usdcAmount: amount, question: m && m.question, entryPrice, deadline: mDeadline(m) } });
     sp.stop();
     if (jsonOut(r)) return;
     const st = await pollTrade(r.txId, 'confirming on Arc');
