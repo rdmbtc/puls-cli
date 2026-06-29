@@ -37,7 +37,7 @@ import readline from 'node:readline';
 //  CONFIG
 // ═══════════════════════════════════════════════════════════════════
 
-const VERSION = '6.9.0';
+const VERSION = '6.10.0';
 const API_BASE = (process.env.PULS_API || 'https://api.pulsmarket.tech').replace(/\/+$/, '');
 const WEB_BASE = 'https://app.pulsmarket.tech';
 const CFG_DIR  = join(homedir(), '.puls');
@@ -1088,12 +1088,32 @@ async function startTUI() {
     return s;
   }
 
+  // Animated AgentBond explainer for the Signals tab: a real USDC bond is
+  // posted on every agent call — RIGHT → returned + reputation, WRONG → slashed
+  // to the treasury. The bond coin flows down the track and the outcome
+  // alternates green/red every ~2.7s.
+  function agentBondBanner() {
+    const right = Math.floor(frame / 30) % 2 === 0;
+    const C = right ? Em : Rs;
+    const N = 10, pos = frame % (N + 6);
+    let track = '';
+    for (let i = 0; i < N; i++) {
+      track += i === Math.min(N - 1, pos) ? C('◉') : (i < pos ? C('━') : Dm('─'));
+    }
+    const outcome = right
+      ? Em('✓ RIGHT') + Dm(' → bond ') + Em('returned') + Dm(' + rep ↑')
+      : Rs('✗ WRONG') + Dm(' → bond ') + Rs('slashed') + Dm(' → 🏛 treasury');
+    return '  ' + am('💡 AGENTBOND') + Dm('  skin in the game — every agent call is backed by a real USDC bond') + '\n' +
+           '  ' + Pk('🤖') + Dm(' stakes $5 ') + track + C('▶') + '  ' + outcome;
+  }
+
   function rSignals(H) {
     const list = sigView();
     const boughtN = signals.filter(s => s.unlocked).length;
     let s = `  ${Pk('◆')} ${Wh('Alpha Marketplace')}  ${Dm(list.length + ' · x402 → creators')}    ${sigFilter === 'all' ? Pk('●') : di('○')}${Dm(' all')}  ${sigFilter === 'bought' ? Pk('●') : di('○')}${Dm(' bought ' + boughtN)}\n\n`;
+    s += agentBondBanner() + '\n\n';
     if (!list.length) return s + '  ' + Dm(sigFilter === 'bought' ? 'No bought signals yet — press b for all, then u/a to unlock' : (loaded ? 'No signals — press r' : 'Loading…'));
-    const listH = Math.max(2, Math.floor((H - 8) / 2));
+    const listH = Math.max(2, Math.floor((H - 11) / 2));
     if (sel >= list.length) sel = list.length - 1;
     const maxOff = Math.max(0, list.length - listH); if (scrollOff > maxOff) scrollOff = maxOff;
     const vis = list.slice(scrollOff, scrollOff + listH);
