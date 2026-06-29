@@ -894,9 +894,20 @@ async function startTUI() {
         if (/not started/i.test(e.message)) { await api('/api/agent/start', { method: 'POST', body: { budget: 0 }, auth: true }).catch(() => {}); r = await ask(); }
         else throw e;
       }
+      const _APP = 'https://app.pulsmarket.tech';
+      const _deslug = (q) => (!q || q.includes(' ')) ? (q || '') : q.replace(/-\d{6,}$/, '').replace(/-/g, ' ');
       let txt = String(r.reply || '(no reply)').replace(/\*([^*]+)\*/g, (_, t) => BD + t + RST);
-      if (r.trade) txt += '\n' + Em('⚡ traded ') + (r.trade.side || '') + ' ' + (r.trade.question || '');
-      if (r.signal) txt += '\n' + Em('⚡ bought signal ') + '“' + (r.signal.title || '') + '”' + (r.signal.price != null ? ' · $' + r.signal.price : '') + (r.signal.stance ? ' (' + r.signal.stance + ')' : '') + Dm(' · x402 on Arc');
+      const _sigs = (r.signals && r.signals.length) ? r.signals : (r.signal ? [r.signal] : []);
+      for (const s of _sigs) {
+        txt += '\n' + Em('📡 alpha unlocked ') + '“' + (s.title || '') + '”' + (s.stance ? ' (' + s.stance + ')' : '') + Dm((s.price != null ? ' · $' + s.price : '') + ' · x402');
+        if (s.marketSlug) txt += '\n  ' + Dm('↗ ' + _APP + '/m/' + s.marketSlug);
+      }
+      const _trs = (r.trades && r.trades.length) ? r.trades : (r.trade ? [r.trade] : []);
+      for (const tr of _trs) {
+        txt += '\n' + Em('⚡ trade executed ') + (tr.side || '') + (tr.usdcAmount != null ? ' $' + tr.usdcAmount : '') + ' · ' + _deslug(tr.question || tr.slug || '');
+        if (tr.slug) txt += '\n  ' + Dm('↗ ' + _APP + '/m/' + tr.slug);
+        if (tr.txHash) txt += '\n  ' + Dm('↗ https://testnet.arcscan.app/tx/' + tr.txHash);
+      }
       myLog.push({ role: 'ai', text: txt, sources: r.sources || [] });
       if (r.remaining != null || r.reputation != null) myAgent = { ...(myAgent || { exists: true }), balance: r.remaining ?? (myAgent && myAgent.balance), reputation: r.reputation ?? (myAgent && myAgent.reputation), exists: true };
     } catch (e) { myLog.push({ role: 'ai', text: '⚠ ' + e.message }); }
