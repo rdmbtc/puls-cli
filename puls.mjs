@@ -37,7 +37,7 @@ import readline from 'node:readline';
 //  CONFIG
 // ═══════════════════════════════════════════════════════════════════
 
-const VERSION = '6.10.0';
+const VERSION = '6.11.0';
 const API_BASE = (process.env.PULS_API || 'https://api.pulsmarket.tech').replace(/\/+$/, '');
 const WEB_BASE = 'https://app.pulsmarket.tech';
 const CFG_DIR  = join(homedir(), '.puls');
@@ -878,7 +878,7 @@ async function startTUI() {
     } catch (e) { chatLog.push({ role: 'ai', text: '⚠ ' + e.message }); }
     chatBusy = false; render();
   }
-  function sigView() { return sigFilter === 'bought' ? signals.filter(s => s.unlocked) : signals; }
+  function sigView() { return sigFilter === 'bought' ? signals.filter(s => s.unlocked) : sigFilter === 'finished' ? signals.filter(s => s.marketResolved) : signals; }
 
   async function unlockSel(payer) {
     const s = sigView()[sel]; if (!s || unlocking) return;
@@ -1110,7 +1110,8 @@ async function startTUI() {
   function rSignals(H) {
     const list = sigView();
     const boughtN = signals.filter(s => s.unlocked).length;
-    let s = `  ${Pk('◆')} ${Wh('Alpha Marketplace')}  ${Dm(list.length + ' · x402 → creators')}    ${sigFilter === 'all' ? Pk('●') : di('○')}${Dm(' all')}  ${sigFilter === 'bought' ? Pk('●') : di('○')}${Dm(' bought ' + boughtN)}\n\n`;
+    const finishedN = signals.filter(s => s.marketResolved).length;
+    let s = `  ${Pk('◆')} ${Wh('Alpha Marketplace')}  ${Dm(list.length + ' · x402 → creators')}    ${sigFilter === 'all' ? Pk('●') : di('○')}${Dm(' all')}  ${sigFilter === 'bought' ? Pk('●') : di('○')}${Dm(' bought ' + boughtN)}  ${sigFilter === 'finished' ? Pk('●') : di('○')}${Dm(' finished ' + finishedN)}\n\n`;
     s += agentBondBanner() + '\n\n';
     if (!list.length) return s + '  ' + Dm(sigFilter === 'bought' ? 'No bought signals yet — press b for all, then u/a to unlock' : (loaded ? 'No signals — press r' : 'Loading…'));
     const listH = Math.max(2, Math.floor((H - 11) / 2));
@@ -1121,7 +1122,7 @@ async function startTUI() {
       const sg = vis[i], isSel = (i + scrollOff) === sel;
       const lock = sg.unlocked ? Em('🔓') : pk('🔒');
       s += `${isSel ? Pk(' ▸ ') : '   '}${lock} ${isSel ? Wh((sg.title || '').slice(0, TW - 26)) : Tx((sg.title || '').slice(0, TW - 26))}\n`;
-      s += `      ${Cy('$' + micro(sg.priceUsdc))} ${Dm('· ' + creatorName(sg.creatorUserId))}${sg.bond ? am(' · ◆bond') : ''}${sg.onchain?.tx ? vt(' · ⛓') : ''}\n`;
+      s += `      ${Cy('$' + micro(sg.priceUsdc))} ${Dm('· ' + creatorName(sg.creatorUserId))}${sg.bond?.status === 'returned' ? Em(' · ◆returned') : sg.bond?.status === 'slashed' ? Rs(' · ◆slashed') : sg.bond ? am(' · ◆bond') : ''}${sg.marketResolved ? (sg.marketOutcome === true ? Em(' · ✔YES') : sg.marketOutcome === false ? Rs(' · ✔NO') : Dm(' · ✔resolved')) : ''}${sg.onchain?.tx ? vt(' · ⛓') : ''}\n`;
     }
     const cur = list[sel];
     s += '\n  ' + di('─'.repeat(TW - 4)) + '\n';
@@ -1241,7 +1242,7 @@ async function startTUI() {
     else if (tab === TAB.MARKETS && detailMarket) hint = narrow ? `${Pk('Esc')} back  ${Pk('o')} open  ${Pk('Tab')} view` : `${Pk('Esc')} back   ${Pk('o')} open in browser   ${Pk('Tab')} switch   ${Pk('q')} quit`;
     else if (tab === TAB.MARKETS) hint = narrow ? `${Pk('↑↓')} nav  ${Pk('↵')} detail  ${Pk('/')} find  ${Pk('Tab')} view` : `${Pk('↑↓')} nav   ${Pk('Enter')} detail   ${Pk('/')} search   ${Pk('s')} sort   ${Pk('Tab')} switch   ${Pk('q')} quit`;
     else if (tab === TAB.SIGNALS && sigDetail) hint = narrow ? `${Pk('Esc')} back  ${Pk('↑↓')} scroll  ${Pk('o')} predict` : `${Pk('Esc')} back   ${Pk('↑↓')} scroll   ${Pk('o')} predict   ${Pk('c')} on-chain   ${Pk('Tab')} switch`;
-    else if (tab === TAB.SIGNALS) hint = narrow ? `${Pk('u')} buy ${Pk('a')} agent ${Pk('b')} bought ${Pk('↵')} read` : `${Pk('↑↓')} nav   ${Pk('u')} you buy   ${Pk('a')} agent buys   ${Pk('b')} bought   ${Pk('Enter')} read   ${Pk('Tab')} switch`;
+    else if (tab === TAB.SIGNALS) hint = narrow ? `${Pk('u')} buy ${Pk('a')} agent ${Pk('b')} bought ${Pk('f')} fin ${Pk('↵')} read` : `${Pk('↑↓')} nav   ${Pk('u')} you buy   ${Pk('a')} agent buys   ${Pk('b')} bought   ${Pk('f')} finished   ${Pk('Enter')} read   ${Pk('Tab')} switch`;
     else if (tab === TAB.MYAGENT) hint = narrow ? `${Pk('↵')} send  ${Pk('^T')} top mkt  ${Pk('^B')} top sig  ${Pk('^C')} quit` : `${Pk('Enter')} send to your agent   ${Pk('Ctrl+T')} buy top market   ${Pk('Ctrl+B')} buy top signal + stake   ${Pk('Tab')} switch   ${Pk('Ctrl+C')} quit`;
     else hint = narrow ? `${Pk('1-6')} views  ${Pk('Tab')} next  ${Pk('q')} quit` : `${Pk('1-6')} views   ${Pk('Tab')} next   ${Pk('r')} refresh   ${Pk('Ctrl+P')} palette   ${Pk('q')} quit`;
     let s = '  ' + rule(TW - 4) + '\n  ' + hint + '\n';
@@ -1427,6 +1428,7 @@ async function startTUI() {
       if (key === '\x1b[A' || key === 'k') { sel = Math.max(0, sel - 1); if (sel < scrollOff) scrollOff = sel; render(); return; }
       if (key === '\x1b[B' || key === 'j') { sel = Math.min(list.length - 1, sel + 1); if (sel >= scrollOff + maxVis) scrollOff = sel - maxVis + 1; render(); return; }
       if (key === 'b') { sigFilter = sigFilter === 'bought' ? 'all' : 'bought'; sel = 0; scrollOff = 0; setStatus(sigFilter === 'bought' ? 'Showing bought signals' : 'Showing all signals'); render(); return; }
+      if (key === 'f') { sigFilter = sigFilter === 'finished' ? 'all' : 'finished'; sel = 0; scrollOff = 0; setStatus(sigFilter === 'finished' ? 'Showing finished (resolved) signals' : 'Showing all signals'); render(); return; }
       if (key === 'u') { await unlockSel(); return; }
       if (key === 'a') { await unlockSel('agent'); return; }
       if (key === '\r') { const cur = list[sel]; if (cur && cur.unlocked) { sigDetail = cur; docScroll = 0; render(); } else { await unlockSel(); } return; }
