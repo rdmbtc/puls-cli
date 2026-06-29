@@ -37,7 +37,7 @@ import readline from 'node:readline';
 //  CONFIG
 // ═══════════════════════════════════════════════════════════════════
 
-const VERSION = '6.6.1';
+const VERSION = '6.9.0';
 const API_BASE = (process.env.PULS_API || 'https://api.pulsmarket.tech').replace(/\/+$/, '');
 const WEB_BASE = 'https://app.pulsmarket.tech';
 const CFG_DIR  = join(homedir(), '.puls');
@@ -338,6 +338,34 @@ function thinkingLine(frame, startMs, phrases = THINK_PHRASES) {
   const [pr, pg, pb] = gradColor((frame % 60) / 60);
   const el = startMs ? '  ' + Dm(((Date.now() - startMs) / 1000).toFixed(1) + 's') : '';
   return fg(pr, pg, pb) + sp + RST + ' ' + body + RST + el;
+}
+
+// Live agent pipeline: build the steps the agent will actually take from what
+// was asked. Returns null for pure questions (no signal/trade intent) so the
+// caller falls back to the default thinking line.
+function agentPipelineSteps(msg) {
+  const s = String(msg || '').toLowerCase();
+  const wantsSignal = /signal|alpha|forecast/.test(s);
+  const wantsTrade = /\b(buy|trade|bet|stake|long|short|sell)\b|\$\s*\d/.test(s);
+  if (!wantsSignal && !wantsTrade) return null;
+  const steps = ['Researching the web'];
+  if (wantsSignal) steps.push('Buying alpha · x402');
+  steps.push('Reasoning');
+  if (wantsTrade) steps.push('Trading on Arc');
+  return steps;
+}
+// Render the pipeline as lines: done steps check off, the active one spins +
+// pulses, pending steps sit dim. Advances ~every 2.6s off the elapsed clock.
+function agentPipelineLines(frame, startMs, steps) {
+  const elapsed = startMs ? Date.now() - startMs : 0;
+  const active = Math.min(steps.length - 1, Math.floor(elapsed / 2600));
+  const sp = SPINNERS.dots[frame % SPINNERS.dots.length];
+  const [pr, pg, pb] = gradColor((frame % 60) / 60);
+  return steps.map((label, i) => {
+    if (i < active) return '   ' + Em('✓') + ' ' + Dm(label);
+    if (i === active) return '   ' + fg(pr, pg, pb) + sp + RST + ' ' + Tx(label) + Dm('…');
+    return '   ' + Dm('○ ' + label);
+  });
 }
 
 async function toast(msg, icon, color) {
@@ -1159,13 +1187,23 @@ async function startTUI() {
       lines.push('   ' + cy('›') + ' ' + Tx('buy YES on the USA World Cup market if it is under 30¢'));
       lines.push('   ' + cy('›') + ' ' + Tx('what are your best opportunities right now?'));
       lines.push('  ' + Dm('It can also buy alpha for you — in ') + Pk('Signals') + Dm(' press ') + Pk('a') + Dm('.'));
+      lines.push('  ' + Dm('Quick: ') + Pk('Ctrl+T') + Dm(' buy top market  ·  ') + Pk('Ctrl+B') + Dm(' buy top signal + stake $2.'));
     }
     for (const m of myLog) {
       if (m.role === 'you') { lines.push('  ' + Cy('You')); wrapText(m.text, PW - 6, '   ').forEach(l => lines.push(tx(l))); }
       else { lines.push('  ' + Pk('🤖 Agent')); wrapText(m.text, PW - 6, '   ').forEach(l => lines.push(Tx(l))); if (m.sources && m.sources.length) lines.push('   ' + Dm('↳ ' + m.sources.map(x => hostOf(x.url || x.title)).filter(Boolean).slice(0, 3).join('  ·  '))); }
       lines.push('');
     }
-    if (myBusy) lines.push('  ' + Pk('🤖 Agent') + '  ' + thinkingLine(frame, myBusyAt, ['researching the market', 'reasoning over the data', 'checking my budget', 'pricing the edge', 'sizing the trade']));
+    if (myBusy) {
+      const lastYou = [...myLog].reverse().find((m) => m.role === 'you');
+      const steps = agentPipelineSteps(lastYou ? lastYou.text : '');
+      if (steps) {
+        lines.push('  ' + Pk('🤖 Agent'));
+        agentPipelineLines(frame, myBusyAt, steps).forEach((l) => lines.push(l));
+      } else {
+        lines.push('  ' + Pk('🤖 Agent') + '  ' + thinkingLine(frame, myBusyAt, ['researching the market', 'reasoning over the data', 'checking my budget', 'pricing the edge', 'sizing the trade']));
+      }
+    }
     const avail = Math.max(2, H - 2);
     const shown = lines.slice(Math.max(0, lines.length - avail));
     let s = shown.join('\n') + '\n';
@@ -1184,7 +1222,7 @@ async function startTUI() {
     else if (tab === TAB.MARKETS) hint = narrow ? `${Pk('↑↓')} nav  ${Pk('↵')} detail  ${Pk('/')} find  ${Pk('Tab')} view` : `${Pk('↑↓')} nav   ${Pk('Enter')} detail   ${Pk('/')} search   ${Pk('s')} sort   ${Pk('Tab')} switch   ${Pk('q')} quit`;
     else if (tab === TAB.SIGNALS && sigDetail) hint = narrow ? `${Pk('Esc')} back  ${Pk('↑↓')} scroll  ${Pk('o')} predict` : `${Pk('Esc')} back   ${Pk('↑↓')} scroll   ${Pk('o')} predict   ${Pk('c')} on-chain   ${Pk('Tab')} switch`;
     else if (tab === TAB.SIGNALS) hint = narrow ? `${Pk('u')} buy ${Pk('a')} agent ${Pk('b')} bought ${Pk('↵')} read` : `${Pk('↑↓')} nav   ${Pk('u')} you buy   ${Pk('a')} agent buys   ${Pk('b')} bought   ${Pk('Enter')} read   ${Pk('Tab')} switch`;
-    else if (tab === TAB.MYAGENT) hint = narrow ? `${Pk('Enter')} send  ${Pk('Tab')} view  ${Pk('^C')} quit` : `${Pk('Enter')} send to your agent   ${Pk('Tab')} switch view   ${Pk('Ctrl+P')} palette   ${Pk('Ctrl+C')} quit`;
+    else if (tab === TAB.MYAGENT) hint = narrow ? `${Pk('↵')} send  ${Pk('^T')} top mkt  ${Pk('^B')} top sig  ${Pk('^C')} quit` : `${Pk('Enter')} send to your agent   ${Pk('Ctrl+T')} buy top market   ${Pk('Ctrl+B')} buy top signal + stake   ${Pk('Tab')} switch   ${Pk('Ctrl+C')} quit`;
     else hint = narrow ? `${Pk('1-6')} views  ${Pk('Tab')} next  ${Pk('q')} quit` : `${Pk('1-6')} views   ${Pk('Tab')} next   ${Pk('r')} refresh   ${Pk('Ctrl+P')} palette   ${Pk('q')} quit`;
     let s = '  ' + rule(TW - 4) + '\n  ' + hint + '\n';
     s += '  ' + (statusMsg ? Em('◈ ') + Tx(statusMsg) : di(new Date().toLocaleTimeString('en', { hour12: false }) + (loaded ? '  ·  ' + markets.length + ' mkts · ' + signals.length + ' signals' : '  ·  loading…')));
@@ -1303,6 +1341,8 @@ async function startTUI() {
     if (tab === TAB.CHAT || tab === TAB.MYAGENT) {
       const my = tab === TAB.MYAGENT;
       if (key === '\r') { my ? await sendMyAgent() : await sendChat(); return; }
+      if (my && key === '\x14') { myInput = 'Buy $2 on the single hottest trending market right now — pick it and execute.'; await sendMyAgent(); return; } // Ctrl+T → top market
+      if (my && key === '\x02') { myInput = 'Find the top-rated creator signal and stake $2 on its pick right now.'; await sendMyAgent(); return; } // Ctrl+B → top signal + stake
       if (key === '\x7f' || key === '\b') { if (my) myInput = myInput.slice(0, -1); else chatInput = chatInput.slice(0, -1); render(); return; }
       if (key === '\x1b') { if (my) myInput = ''; else chatInput = ''; render(); return; }
       if (key.length === 1 && key >= ' ') { if (my) myInput += key; else chatInput += key; render(); return; }
