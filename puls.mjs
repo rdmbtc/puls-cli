@@ -37,7 +37,7 @@ import readline from 'node:readline';
 //  CONFIG
 // ═══════════════════════════════════════════════════════════════════
 
-const VERSION = '6.11.0';
+const VERSION = '6.11.1';
 const API_BASE = (process.env.PULS_API || 'https://api.pulsmarket.tech').replace(/\/+$/, '');
 const WEB_BASE = 'https://app.pulsmarket.tech';
 const CFG_DIR  = join(homedir(), '.puls');
@@ -623,7 +623,7 @@ const cacheGet = (k, ttl) => { const e = _cache.get(k); return e && Date.now() -
 const cacheSet = (k, v) => _cache.set(k, { v, t: Date.now() });
 const cacheClear = () => _cache.clear();
 
-async function api(path, { method = 'GET', body, auth = false, key: ek } = {}) {
+async function api(path, { method = 'GET', body, auth = false, key: ek, timeoutMs } = {}) {
   const headers = { accept: 'application/json' };
   if (body) headers['content-type'] = 'application/json';
   if (auth || ek) {
@@ -631,16 +631,25 @@ async function api(path, { method = 'GET', body, auth = false, key: ek } = {}) {
     if (!k) throw new Error('Not logged in. Run:  puls login pk_live_…');
     headers.authorization = 'Bearer ' + k;
   }
+  // Agent/copilot chat + signal unlock execute on-chain (deploy → approve → buy
+  // → poll) and can take a minute+, so give them a generous timeout; plain reads
+  // stay snappy. Never auto-retry a mutating (non-GET) call — a retried trade
+  // could execute twice.
+  const slow = /\/api\/(agent|copilot)\/chat$|\/unlock$/.test(path);
+  const tmo = timeoutMs ?? (slow ? 150000 : 15000);
+  const canRetry = method === 'GET';
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const resp = await fetch(API_BASE + path, { method, headers, body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(15000) });
+      const resp = await fetch(API_BASE + path, { method, headers, body: body ? JSON.stringify(body) : undefined, signal: AbortSignal.timeout(tmo) });
       const text = await resp.text();
       let data; try { data = JSON.parse(text); } catch { data = text; }
-      if (!resp.ok) { if (resp.status >= 500 && attempt < 2) { await sleep(300 * 2**attempt); continue; } throw new Error(data?.error || 'HTTP ' + resp.status); }
+      if (!resp.ok) { if (resp.status >= 500 && canRetry && attempt < 2) { await sleep(300 * 2**attempt); continue; } throw new Error(data?.error || 'HTTP ' + resp.status); }
       return data;
     } catch (e) {
-      if (/TimeoutError|network|ECONNRESET|fetch/i.test(e.message) && attempt < 2) { await sleep(300 * 2**attempt); continue; }
-      throw new Error(e.name === 'TimeoutError' ? 'Request timed out' : 'Network: ' + e.message);
+      const msg = e.message || '';
+      if (canRetry && /TimeoutError|network|ECONNRESET|fetch/i.test(msg) && attempt < 2) { await sleep(300 * 2**attempt); continue; }
+      if (e.name === 'TimeoutError') throw new Error('Request timed out');
+      throw new Error(/fetch failed|ECONNRESET|getaddrinfo|ENOTFOUND|network/i.test(msg) ? 'Network: ' + msg : msg);
     }
   }
 }

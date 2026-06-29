@@ -1,6 +1,6 @@
 {
   "name": "@pulsmarket/cli",
-  "version": "6.11.0",
+  "version": "6.11.1",
   "description": "Puls CLI — a full terminal trading desk for the Puls prediction market on Arc: buy / sell / claim predictions, live markets + candlestick charts, the AI agent swarm, AI oracle, x402 signal unlocks, bring-your-own-agent, and a full-screen TUI.",
   "type": "module",
   "bin": {
