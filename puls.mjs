@@ -831,7 +831,7 @@ async function startTUI() {
         if (TERMINAL_STATES.has(String(st.state || '').toUpperCase())) break;
       }
     }
-    return { done: ['COMPLETE', 'CONFIRMED'].includes(String(st.state || '').toUpperCase()), state: st.state };
+    return { done: ['COMPLETE', 'CONFIRMED'].includes(String(st.state || '').toUpperCase()), state: st.state, txHash: st.txHash };
   }
   async function execBuy() {
     const m = detailMarket; const amt = parseFloat(buyMode && buyMode.amount); const side = (buyMode && buyMode.side) || 'YES';
@@ -845,7 +845,14 @@ async function startTUI() {
     try {
       const r = await api('/api/trade/buy', { method: 'POST', auth: true, body: { slug: m.slug, side, usdcAmount: amt, question: m.question, entryPrice, deadline: mDeadline(m) } });
       const res = await tuiTradeResult(r);
-      setStatus(res.done ? '✓ bought ' + side + ' · $' + amt + ' USDC' : '● ' + (res.state || 'submitted')); await loadPf(); render();
+      if (res.done) {
+        setStatus('');
+        const link = res.txHash ? `\n${Dm('⛓ arcscan.app/tx/')}${cy(res.txHash.slice(0, 8) + '…')}` : '';
+        await toast(`Bought ${side} · $${amt} USDC${link}`, '✓', Em);
+      } else {
+        setStatus(`● ${res.state || 'submitted'}`);
+      }
+      await loadPf(); render();
     } catch (e) { setStatus('✗ ' + (e.message || e)); render(); }
   }
   async function execSell(p) {
@@ -858,7 +865,14 @@ async function startTUI() {
     try {
       const r = await api('/api/trade/sell', { method: 'POST', auth: true, body: { slug: p.slug, contractAddress: p.contractAddress || p.marketId, side, shares, question: p.question, owner: p.owner, entryPrice: p.entryPrice } });
       const res = await tuiTradeResult(r);
-      setStatus(res.done ? '✓ sold ' + side : '● ' + (res.state || 'submitted')); await loadPf(); render();
+      if (res.done) {
+        setStatus('');
+        const link = res.txHash ? `\n${Dm('⛓ arcscan.app/tx/')}${cy(res.txHash.slice(0, 8) + '…')}` : '';
+        await toast(`Sold ${side}${link}`, '✓', Em);
+      } else {
+        setStatus(`● ${res.state || 'submitted'}`);
+      }
+      await loadPf(); render();
     } catch (e) { setStatus('✗ ' + (e.message || e)); render(); }
   }
   async function execClaim(p) {
@@ -869,7 +883,14 @@ async function startTUI() {
     try {
       const r = await api('/api/trade/claim', { method: 'POST', auth: true, body: { slug: p.slug, contractAddress: p.contractAddress || p.marketId } });
       const res = await tuiTradeResult(r);
-      setStatus(res.done ? '✓ claim settled' : '● ' + (res.state || (r && r.ok ? 'claimed' : 'submitted'))); await loadPf(); render();
+      if (res.done) {
+        setStatus('');
+        const link = res.txHash ? `\n${Dm('⛓ arcscan.app/tx/')}${cy(res.txHash.slice(0, 8) + '…')}` : '';
+        await toast(`Claim settled${link}`, '✓', Em);
+      } else {
+        setStatus(`● ${res.state || (r && r.ok ? 'claimed' : 'submitted')}`);
+      }
+      await loadPf(); render();
     } catch (e) { setStatus('✗ ' + (e.message || e)); render(); }
   }
   async function loadStats() { try { statsData = await api('/api/stats'); } catch {} }
