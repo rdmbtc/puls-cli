@@ -37,7 +37,7 @@ import readline from 'node:readline';
 //  CONFIG
 // ═══════════════════════════════════════════════════════════════════
 
-const VERSION = '6.11.2';
+const VERSION = '6.12.0';
 const API_BASE = (process.env.PULS_API || 'https://api.pulsmarket.tech').replace(/\/+$/, '');
 const WEB_BASE = 'https://app.pulsmarket.tech';
 const CFG_DIR  = join(homedir(), '.puls');
@@ -579,6 +579,44 @@ function walletCard(d) {
     `${Dm('address')}  ${Tx(short)}`,
     `${Dm('balance')} ${Cy('$' + (d.usdcBalance ?? '0') + ' USDC')}`,
   ], { w: 44, title: Wh('PULS') + ' ' + Dm('wallet') });
+}
+
+/**
+ * Receipt — a loud, attention-grabbing success block for on-chain payments.
+ * Used after every USDC settlement (signal unlock, trade buy, claim) so judges
+ * and users see a clear, formatted transaction log in the terminal.
+ *
+ *   receipt({
+ *     kind:   'x402',            // 'x402' | 'trade' | 'claim'  (controls the badge label)
+ *     amount: '0.001',           // USDC string
+ *     to:     'Agent Sage',      // recipient label
+ *     from:   'you',             // optional payer label (default: 'you')
+ *     txHash: '0xabc…',          // optional on-chain tx hash
+ *     note:   'alpha unlocked',  // optional one-liner under the amount
+ *   });
+ */
+function receipt({ kind = 'x402', amount, to, from = 'you', txHash = null, note = null }) {
+  const label = kind === 'trade' ? 'TRADE' : kind === 'claim' ? 'CLAIM' : 'x402 PAYMENT';
+  const BOX_W = 50;
+  const pad = (inner) => {
+    const visibleLen = [...stripAnsi(inner)].reduce((n, cp) => n + charW(cp.codePointAt(0)), 0);
+    return inner + ' '.repeat(Math.max(1, BOX_W - 2 - visibleLen));
+  };
+  const bar = Dm('─'.repeat(BOX_W - 2));
+  const head = '  ' + em('🟢') + ' ' + Em('[RECEIPT] ' + label + ' CLEARED') + '  ' + Dm('· settled on Arc');
+  const lines = [
+    head,
+    '  ' + Dm('┌' + bar + '┐'),
+    '  ' + Dm('│ ') + pad(Wh('$' + amount) + Dm(' USDC')) + Dm('│'),
+    '  ' + Dm('│ ') + pad(Dm('from ') + Tx(String(from))) + Dm('│'),
+    '  ' + Dm('│ ') + pad(Dm('  to ') + Cy(String(to))) + Dm('│'),
+    '  ' + Dm('└' + bar + '┘'),
+  ];
+  if (note) lines.push('  ' + Dm('▸ ') + Tx(note));
+  if (txHash) lines.push('  ' + Dm('⛓ ') + cy(String(txHash)));
+  ln('');
+  for (const l of lines) ln(l);
+  ln('  ' + rule(PW));
 }
 
 
@@ -2036,7 +2074,14 @@ async function cmdUnlock(id) {
     } else if (r.alreadyUnlocked) {
       ln('  ' + Em('✓ already unlocked') + Dm(' — no charge.'));
     } else {
-      ln('  ' + Em('✓ x402 payment settled') + Dm('  ·  $' + price + ' USDC → ' + creator));
+      const txId = r.txId || (r.payment && r.payment.tx) || (s.onchain && s.onchain.tx) || null;
+      receipt({
+        amount: price,
+        to: creator,
+        from: byAgent ? 'your agent' : 'you',
+        txHash: txId ? (txId.startsWith('0x') ? ('https://testnet.arcscan.app/tx/' + txId) : txId) : null,
+        note: 'x402 nanopayment · alpha unlocked',
+      });
     }
     ln('');
     if (s.stance) ln('  ' + Dm('The call:  ') + (s.stance === 'YES' ? Em('▲ YES') : Rs('▼ NO')) + Dm('   confidence ') + Wh(Math.round((s.confidence || 0) * 100) + '%') + Dm('   edge ') + Wh((s.edgeBps || 0) + 'bps'));
@@ -2377,7 +2422,17 @@ async function cmdBuy(slug, sideArg, amountArg) {
     sp.stop();
     if (jsonOut(r)) return;
     const st = await pollTrade(r.txId, 'confirming on Arc');
-    ln('  ' + (tradeDone(st) ? Em('✓ bought ' + side) : Am('● ' + (st.state || 'submitted'))) + Dm('  ·  $' + amount + ' USDC'));
+    if (tradeDone(st)) {
+      receipt({
+        kind: 'trade',
+        amount: '$' + amount + ' USDC',
+        to: side + ' shares' + (m && m.question ? ' · ' + clip(m.question, 36) : ''),
+        note: 'bought ' + side + ' · settled on Arc',
+        txHash: st.txHash ? 'https://testnet.arcscan.app/tx/' + st.txHash : null,
+      });
+    } else {
+      ln('  ' + Am('● ' + (st.state || 'submitted')) + Dm('  ·  $' + amount + ' USDC'));
+    }
     if (st.txHash) ln('  ' + Dm('⛓ ') + cy('https://testnet.arcscan.app/tx/' + st.txHash));
     ln('  ' + Dm('track it: ') + Pk('puls portfolio') + Dm('  ·  ') + cy('pulsmarket.tech/versus'));
     ln('\n  ' + rule(PW) + '\n');
@@ -2438,8 +2493,14 @@ async function cmdClaim(slug) {
     sp.stop();
     if (jsonOut(r)) return;
     const st = r.txId ? await pollTrade(r.txId, 'confirming claim') : r;
-    ln('  ' + Em('✓ claim submitted') + (r.payoutUsdc != null ? Dm('  ·  $' + usd(r.payoutUsdc) + ' USDC') : ''));
-    if (st.txHash) ln('  ' + Dm('⛓ ') + cy('https://testnet.arcscan.app/tx/' + st.txHash));
+    const payout = r.payoutUsdc != null ? usd(r.payoutUsdc) : null;
+    receipt({
+      kind: 'claim',
+      amount: payout != null ? payout : '—',
+      to: 'your wallet',
+      note: 'resolved-market payout settled on Arc',
+      txHash: st.txHash ? 'https://testnet.arcscan.app/tx/' + st.txHash : null,
+    });
     ln('\n  ' + rule(PW) + '\n');
   } catch (e) {
     sp.stop();
