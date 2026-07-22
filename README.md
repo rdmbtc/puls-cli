@@ -6,7 +6,8 @@ An interactive terminal app to chat with your AI agent and watch the live
 the agent economy.
 
 ```bash
-cd cli
+git clone https://github.com/rdmbtc/puls-cli.git
+cd puls-cli
 npm install
 npm link        # global `puls`  (or: node puls.mjs)
 puls            # launch the interactive app
@@ -56,6 +57,6 @@ puls streams        # pay-per-second USDC streaming on Arc
 
 - `PULS_API=https://… puls` — point at another backend.
 - `PULS_NO_TUI=1` — force the plain one-shot mode.
-- Your agent must be started once in the app (My Agent → fund & start) before it can trade from `/chat`.
+- Start your agent in the Puls app (Profile → Agent → Fund & Start) before trading from the CLI.
 
 Built on Arc · powered by Circle · [docs.pulsmarket.tech](https://docs.pulsmarket.tech)
